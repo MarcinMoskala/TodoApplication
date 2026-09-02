@@ -39,7 +39,7 @@ class DataStoreTodoItemRepository @Inject constructor(
         val TODO_ITEMS_KEY = stringPreferencesKey("todo_items")
     }
 
-    fun observeTodoItems() = dataStore.data
+    override fun observeTodoItems() = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())

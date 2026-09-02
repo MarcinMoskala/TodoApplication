@@ -3,6 +3,8 @@ package com.marcinmoskala.todoapplication
 import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.domain.repositories.TodoItemRepository
 import com.marcinmoskala.todoapplication.domain.usecase.AddItemUseCase
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -12,6 +14,8 @@ class AddItemUseCaseTest {
 
     private class FakeTodoItemRepository : TodoItemRepository {
         val items = mutableListOf<TodoItem>()
+
+        override fun observeTodoItems(): Flow<List<TodoItem>> = flowOf(items.toList())
 
         override suspend fun getTodoItems(): List<TodoItem> = items.toList()
 

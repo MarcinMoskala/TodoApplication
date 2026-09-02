@@ -1,17 +1,20 @@
 package com.marcinmoskala.todoapplication.ui.todos
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.domain.repositories.TodoItemRepository
 import com.marcinmoskala.todoapplication.domain.usecase.AddItemUseCase
+import com.marcinmoskala.todoapplication.ui.details.Navigator
+import com.marcinmoskala.todoapplication.ui.navigation.Destination
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import perfetto.protos.UiState
 import javax.inject.Inject
 import kotlin.collections.map
 
@@ -19,65 +22,85 @@ import kotlin.collections.map
 class TodoViewModel @Inject constructor(
     private val itemRepository: TodoItemRepository,
     private val addItemUseCase: AddItemUseCase,
+    private val navigator: Navigator,
 ) : ViewModel() {
-    val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
+    private val items = itemRepository.observeTodoItems().stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        emptyList(),
+    )
+    private val dialogState = MutableStateFlow<String?>(null)
 
-    var items by mutableStateOf(Initial)
-    var addDialog by mutableStateOf<String?>(null)
+    val uiState = items.combine(dialogState) { items, dialogState ->
+        TodoUiState(
+            items = items,
+            addDialog = dialogState,
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        TodoUiState(emptyList(), null)
+    )
 
-    init {
-        scope.launch {
-            items = itemRepository.getTodoItems()
+    fun onAction(uiAction: TodoUiAction) {
+        when (uiAction) {
+            is TodoUiAction.AddItem -> addItem(uiAction.text)
+            TodoUiAction.AddItemClicked -> onAddItemClicked()
+            is TodoUiAction.DeleteItem -> onDeleteItem(uiAction.itemId)
+            TodoUiAction.DismissAddItemDialog -> onDismissAddItemDialog()
+            is TodoUiAction.EditAddItemDialogText -> onEditAddItemDialogText(uiAction.text)
+            is TodoUiAction.ItemClicked -> onItemClicked(uiAction.item)
+            is TodoUiAction.ToggleCheckbox -> onToggleCheckbox(uiAction.itemId, uiAction.newState)
+            is TodoUiAction.ToggleFavorite -> onToggleFavorite(uiAction.todoId)
         }
     }
 
-    fun onToggleCheckbox(itemId: String, newState: Boolean) {
-        scope.launch {
-            val item = items.firstOrNull { it.id == itemId } ?: return@launch
+    private fun onToggleCheckbox(itemId: String, newState: Boolean) {
+        viewModelScope.launch {
+            val item = items.value.firstOrNull { it.id == itemId } ?: return@launch
             itemRepository.updateItem(item.copy(isChecked = newState))
-            items = items.map { if (it.id == itemId) it.copy(isChecked = newState) else it }
         }
     }
 
-    fun onDeleteItem(itemId: String) {
-        scope.launch {
+    private fun onDeleteItem(itemId: String) {
+        viewModelScope.launch {
             itemRepository.removeItem(itemId)
-            items = items.filter { if (itemId == it.id) false else true }
         }
     }
 
-    fun addItem(text: String) {
+    private fun addItem(text: String) {
         if (text.isNotEmpty()) {
-            addDialog = null
-            scope.launch {
-                val newItem = addItemUseCase(text)
-                items = items + newItem
+            dialogState.value = null
+            viewModelScope.launch {
+                addItemUseCase(text)
             }
         }
     }
 
-    fun onAddItemClicked() {
-        addDialog = ""
+    private fun onAddItemClicked() {
+        dialogState.value = ""
     }
 
-    fun onDismissAddItemDialog() {
-        addDialog = null
+    private fun onDismissAddItemDialog() {
+        dialogState.value = null
     }
 
-    fun onEditAddItemDialogText(text: String) {
-        addDialog = text
+    private fun onEditAddItemDialogText(text: String) {
+        dialogState.value = text
     }
 
-    fun onToggleFavorite(todoId: String) {
-        scope.launch {
-            val item = items.firstOrNull { it.id == todoId } ?: return@launch
+    private fun onToggleFavorite(itemId: String) {
+        viewModelScope.launch {
+            val item = items.value.firstOrNull { it.id == itemId } ?: return@launch
             val updated = item.copy(isFavorite = !item.isFavorite)
             itemRepository.updateItem(updated)
-            items = items.map { if (it.id == todoId) updated else it }
         }
     }
-}
 
+    private fun onItemClicked(item: TodoItem) {
+        navigator.navigateTo(Destination.TodoDetails(item))
+    }
+}
 
 
 val Initial = listOf(

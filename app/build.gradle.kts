@@ -41,7 +41,10 @@ android {
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.navigation3:navigation3-runtime:1.2.0-beta01")
+    implementation("androidx.navigation3:navigation3-ui:1.2.0-beta01")
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.benchmark.common)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)

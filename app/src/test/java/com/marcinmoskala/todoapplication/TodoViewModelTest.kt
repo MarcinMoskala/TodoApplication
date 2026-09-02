@@ -3,10 +3,20 @@ package com.marcinmoskala.todoapplication
 import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.domain.repositories.TodoItemRepository
 import com.marcinmoskala.todoapplication.domain.usecase.AddItemUseCase
+import com.marcinmoskala.todoapplication.ui.details.Navigator
+import com.marcinmoskala.todoapplication.ui.navigation.Destination
+import com.marcinmoskala.todoapplication.ui.todos.TodoUiAction
 import com.marcinmoskala.todoapplication.ui.todos.TodoViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -22,27 +32,27 @@ import org.junit.Test
 class TodoViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+    private val navigator = Navigator()
 
     private class FakeTodoItemRepository(
         initialItems: List<TodoItem> = emptyList()
     ) : TodoItemRepository {
-        val items = initialItems.toMutableList()
+        private val _itemsFlow = MutableStateFlow(initialItems)
 
-        override suspend fun getTodoItems(): List<TodoItem> = items.toList()
+        override fun observeTodoItems(): Flow<List<TodoItem>> = _itemsFlow.asStateFlow()
+
+        override suspend fun getTodoItems(): List<TodoItem> = _itemsFlow.value
 
         override suspend fun addItem(newItem: TodoItem) {
-            items.add(newItem)
+            _itemsFlow.update { it + newItem }
         }
 
         override suspend fun removeItem(id: String) {
-            items.removeAll { it.id == id }
+            _itemsFlow.update { items -> items.filterNot { it.id == id } }
         }
 
         override suspend fun updateItem(item: TodoItem) {
-            val index = items.indexOfFirst { it.id == item.id }
-            if (index != -1) {
-                items[index] = item
-            }
+            _itemsFlow.update { items -> items.map { if (it.id == item.id) item else it } }
         }
     }
 
@@ -64,29 +74,31 @@ class TodoViewModelTest {
         )
         val repository = FakeTodoItemRepository(testItems)
         val useCase = AddItemUseCase(repository)
-        val viewModel = TodoViewModel(repository, useCase)
+        val viewModel = TodoViewModel(repository, useCase, navigator)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
 
         advanceUntilIdle()
 
-        assertEquals(testItems, viewModel.items)
+        assertEquals(testItems, viewModel.uiState.value.items)
     }
 
     @Test
     fun `addItem adds new item and closes dialog`() = runTest {
         val repository = FakeTodoItemRepository()
         val useCase = AddItemUseCase(repository)
-        val viewModel = TodoViewModel(repository, useCase)
+        val viewModel = TodoViewModel(repository, useCase, navigator)
 
         advanceUntilIdle()
 
-        viewModel.onAddItemClicked()
-        assertEquals("", viewModel.addDialog)
+        viewModel.onAction(TodoUiAction.AddItemClicked)
+        advanceUntilIdle()
+        assertEquals("", viewModel.uiState.value.addDialog)
 
-        viewModel.addItem("New task")
+        viewModel.onAction(TodoUiAction.AddItem("New task"))
         advanceUntilIdle()
 
-        assertNull(viewModel.addDialog)
-        assertTrue(viewModel.items.any { it.text == "New task" })
+        assertNull(viewModel.uiState.value.addDialog)
+        assertTrue(viewModel.uiState.value.items.any { it.text == "New task" })
     }
 
     @Test
@@ -94,14 +106,14 @@ class TodoViewModelTest {
         val testItems = listOf(TodoItem("1", false, false, "Item 1"))
         val repository = FakeTodoItemRepository(testItems)
         val useCase = AddItemUseCase(repository)
-        val viewModel = TodoViewModel(repository, useCase)
+        val viewModel = TodoViewModel(repository, useCase, navigator)
 
         advanceUntilIdle()
 
-        viewModel.onToggleCheckbox("1", true)
+        viewModel.onAction(TodoUiAction.ToggleCheckbox("1", true))
         advanceUntilIdle()
 
-        assertEquals(true, viewModel.items.first().isChecked)
+        assertEquals(true, viewModel.uiState.value.items.first().isChecked)
     }
 
     @Test
@@ -109,13 +121,43 @@ class TodoViewModelTest {
         val testItems = listOf(TodoItem("1", false, false, "Item 1"))
         val repository = FakeTodoItemRepository(testItems)
         val useCase = AddItemUseCase(repository)
-        val viewModel = TodoViewModel(repository, useCase)
+        val viewModel = TodoViewModel(repository, useCase, navigator)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
 
         advanceUntilIdle()
 
-        viewModel.onDeleteItem("1")
+        viewModel.onAction(TodoUiAction.DeleteItem("1"))
         advanceUntilIdle()
 
-        assertTrue(viewModel.items.isEmpty())
+        assertTrue(viewModel.uiState.value.items.isEmpty())
+    }
+
+    @Test
+    fun `onToggleFavorite updates favorite status`() = runTest {
+        val testItems = listOf(TodoItem("1", false, false, "Item 1"))
+        val repository = FakeTodoItemRepository(testItems)
+        val useCase = AddItemUseCase(repository)
+        val viewModel = TodoViewModel(repository, useCase, navigator)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
+
+        advanceUntilIdle()
+
+        viewModel.onAction(TodoUiAction.ToggleFavorite("1"))
+        advanceUntilIdle()
+
+        assertEquals(true, viewModel.uiState.value.items.first().isFavorite)
+    }
+
+    @Test
+    fun `onItemClicked navigates to TodoDetails`() = runTest {
+        val repository = FakeTodoItemRepository()
+        val useCase = AddItemUseCase(repository)
+        val testNavigator = Navigator()
+        val viewModel = TodoViewModel(repository, useCase, testNavigator)
+
+        val item = TodoItem("1", false, false, "Item 1")
+        viewModel.onAction(TodoUiAction.ItemClicked(item))
+
+        assertEquals(listOf(Destination.Todos, Destination.TodoDetails(item)), testNavigator.navBackStack)
     }
 }

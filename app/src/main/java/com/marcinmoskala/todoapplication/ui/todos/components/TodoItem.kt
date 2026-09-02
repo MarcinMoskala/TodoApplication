@@ -1,8 +1,6 @@
 package com.marcinmoskala.todoapplication.ui.todos.components
 
 import android.content.res.Configuration
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,14 +22,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.ui.theme.TodoApplicationTheme
+import com.marcinmoskala.todoapplication.ui.todos.TodoUiAction
 
 @Composable
 fun TodoItem(
     item: TodoItem,
     modifier: Modifier = Modifier,
-    onFavoriteToggle: (Boolean) -> Unit = {},
-    onToggleCheckbox: (Boolean) -> Unit = {},
-    onDelete: () -> Unit = {}
+    onAction: (TodoUiAction.Content) -> Unit,
 ) {
     Card(
         modifier = modifier,
@@ -46,19 +43,19 @@ fun TodoItem(
         ) {
             Checkbox(
                 checked = item.isChecked,
-                onCheckedChange = { onToggleCheckbox(it) }
+                onCheckedChange = { onAction(TodoUiAction.ToggleCheckbox(item.id, it)) }
             )
             Text(
                 text = item.text,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = { onFavoriteToggle(!item.isFavorite) }) {
+            IconButton(onClick = { onAction(TodoUiAction.ToggleFavorite(item.id)) }) {
                 Icon(
                     imageVector = if (item.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = null,
                 )
             }
-            IconButton(onClick = { onDelete() }) {
+            IconButton(onClick = { onAction(TodoUiAction.DeleteItem(item.id)) }) {
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = null,
@@ -82,7 +79,7 @@ private fun TodoItemPreview(text: String = "AAA") {
                 isFavorite = false,
                 text = "Test"
             ),
-            onDelete = {}
+            onAction = {},
         )
     }
 }
@@ -98,7 +95,7 @@ private fun TodoItem2Preview() {
                 isFavorite = true,
                 text = "Test"
             ),
-            onDelete = {}
+            onAction = {},
         )
     }
 }
