@@ -3,17 +3,23 @@ package com.marcinmoskala.todoapplication.ui.todos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.domain.repositories.TodoItemRepository
+import com.marcinmoskala.todoapplication.domain.usecase.AddItemUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 import kotlin.collections.map
 
-class TodoViewModel(
+@HiltViewModel
+class TodoViewModel @Inject constructor(
     private val itemRepository: TodoItemRepository,
-) {
+    private val addItemUseCase: AddItemUseCase,
+) : ViewModel() {
     val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
     var items by mutableStateOf(Initial)
@@ -44,7 +50,7 @@ class TodoViewModel(
         if (text.isNotEmpty()) {
             addDialog = null
             scope.launch {
-                val newItem = itemRepository.addItem(text)
+                val newItem = addItemUseCase(text)
                 items = items + newItem
             }
         }

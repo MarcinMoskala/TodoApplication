@@ -12,10 +12,14 @@ import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.domain.repositories.TodoItemRepository
 import com.marcinmoskala.todoapplication.ui.todos.Initial
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.IOException
+import javax.inject.Inject
+import javax.inject.Singleton
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     name = "todo_items",
@@ -24,7 +28,8 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
     }
 )
 
-class DataStoreTodoItemRepository(
+@Singleton
+class DataStoreTodoItemRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>
 ) : TodoItemRepository {
 
@@ -34,45 +39,33 @@ class DataStoreTodoItemRepository(
         val TODO_ITEMS_KEY = stringPreferencesKey("todo_items")
     }
 
-    override suspend fun getTodoItems(): List<TodoItem> {
-        val preferences = dataStore.data
-            .catch { exception ->
-                if (exception is IOException) {
-                    emit(emptyPreferences())
-                } else {
-                    throw exception
-                }
+    fun observeTodoItems() = dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
             }
-            .first()
-        val jsonString = preferences[TODO_ITEMS_KEY] ?: return Initial
-        return try {
-            Json.decodeFromString<List<TodoItem>>(jsonString)
-        } catch (e: Exception) {
-            Initial
         }
-    }
+        .map { preferences ->
+            val jsonString = preferences[TODO_ITEMS_KEY] ?: return@map Initial
+            try {
+                Json.decodeFromString<List<TodoItem>>(jsonString)
+            } catch (e: Exception) {
+                Initial
+            }
+        }
+        .distinctUntilChanged()
 
-    override suspend fun addItem(text: String): TodoItem {
-        var createdItem: TodoItem? = null
+    override suspend fun getTodoItems(): List<TodoItem> =
+        observeTodoItems().first()
+
+    override suspend fun addItem(newItem: TodoItem) {
         dataStore.edit { preferences ->
             val currentItems = getCurrentItems(preferences)
-            val nextId = (currentItems.maxOfOrNull { it.id.toIntOrNull() ?: 0 } ?: 0) + 1
-            val newItem = TodoItem(
-                id = nextId.toString(),
-                isChecked = false,
-                isFavorite = false,
-                text = text
-            )
-            createdItem = newItem
             val updatedItems = currentItems + newItem
             preferences[TODO_ITEMS_KEY] = Json.encodeToString(updatedItems)
         }
-        return createdItem ?: TodoItem(
-            id = "1",
-            isChecked = false,
-            isFavorite = false,
-            text = text
-        )
     }
 
     override suspend fun removeItem(id: String) {
