@@ -6,7 +6,9 @@ import androidx.compose.runtime.setValue
 import kotlin.collections.map
 
 class TodoViewModel {
-    var items by mutableStateOf(Initial)
+    var items by mutableStateOf((1..4).flatMapIndexed { index, _ ->
+        Initial.map { it.copy(id = it.id + 100 * index) }
+    })
     var addDialog by mutableStateOf<String?>(null)
 
     fun onToggleCheckbox(itemId: String, newState: Boolean) {
@@ -37,6 +39,14 @@ class TodoViewModel {
     fun onDismissAddItemDialog() {
         addDialog = null
     }
+
+    fun onEditAddItemDialogText(text: String) {
+        addDialog = text
+    }
+
+    fun onToggleFavorite(todoId: String) {
+        items = items.map { if (it.id == todoId) it.copy(isFavorite = !it.isFavorite) else it }
+    }
 }
 
 data class TodoItem(
@@ -46,7 +56,7 @@ data class TodoItem(
     val text: String,
 )
 
-private val Initial = listOf(
+val Initial = listOf(
     TodoItem(
         id = "1",
         isChecked = false,
