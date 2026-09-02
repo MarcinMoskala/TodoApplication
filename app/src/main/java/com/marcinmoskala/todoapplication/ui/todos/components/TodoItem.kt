@@ -22,8 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.ui.theme.TodoApplicationTheme
-import com.marcinmoskala.todoapplication.ui.todos.TodoItem
 
 @Composable
 fun TodoItem(

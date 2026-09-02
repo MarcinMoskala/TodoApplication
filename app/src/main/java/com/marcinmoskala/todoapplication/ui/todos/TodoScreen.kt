@@ -28,14 +28,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import com.marcinmoskala.todoapplication.data.repositories.DataStoreTodoItemRepository
+import com.marcinmoskala.todoapplication.domain.data.TodoItem
 import com.marcinmoskala.todoapplication.ui.TodoAppPreview
 import com.marcinmoskala.todoapplication.ui.theme.TodoApplicationTheme
 import com.marcinmoskala.todoapplication.ui.todos.components.TodoItem
 import kotlinx.coroutines.delay
 
 @Composable
-fun TodoScreen(modifier: Modifier = Modifier) {
-    val vm = remember { TodoViewModel() }
+fun TodoScreen(
+    modifier: Modifier = Modifier,
+    vm: TodoViewModel = run {
+        val context = LocalContext.current
+        remember { TodoViewModel(DataStoreTodoItemRepository(context)) }
+    }
+) {
     val items = vm.items
     val addDialog = vm.addDialog
 

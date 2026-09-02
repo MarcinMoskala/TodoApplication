@@ -3,32 +3,50 @@ package com.marcinmoskala.todoapplication.ui.todos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.marcinmoskala.todoapplication.domain.data.TodoItem
+import com.marcinmoskala.todoapplication.domain.repositories.TodoItemRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlin.collections.map
 
-class TodoViewModel {
-    var items by mutableStateOf((1..4).flatMapIndexed { index, _ ->
-        Initial.map { it.copy(id = it.id + 100 * index) }
-    })
+class TodoViewModel(
+    private val itemRepository: TodoItemRepository,
+) {
+    val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
+
+    var items by mutableStateOf(Initial)
     var addDialog by mutableStateOf<String?>(null)
 
+    init {
+        scope.launch {
+            items = itemRepository.getTodoItems()
+        }
+    }
+
     fun onToggleCheckbox(itemId: String, newState: Boolean) {
-        items = items.map { if (it.id == itemId) it.copy(isChecked = newState) else it }
+        scope.launch {
+            val item = items.firstOrNull { it.id == itemId } ?: return@launch
+            itemRepository.updateItem(item.copy(isChecked = newState))
+            items = items.map { if (it.id == itemId) it.copy(isChecked = newState) else it }
+        }
     }
 
     fun onDeleteItem(itemId: String) {
-        items = items.filter { if (itemId == it.id) false else true }
+        scope.launch {
+            itemRepository.removeItem(itemId)
+            items = items.filter { if (itemId == it.id) false else true }
+        }
     }
 
     fun addItem(text: String) {
         if (text.isNotEmpty()) {
-            val nextId = (items.maxOfOrNull { it.id.toIntOrNull() ?: 0 } ?: 0) + 1
-            items = items + TodoItem(
-                id = nextId.toString(),
-                isChecked = false,
-                isFavorite = false,
-                text = text
-            )
             addDialog = null
+            scope.launch {
+                val newItem = itemRepository.addItem(text)
+                items = items + newItem
+            }
         }
     }
 
@@ -45,16 +63,16 @@ class TodoViewModel {
     }
 
     fun onToggleFavorite(todoId: String) {
-        items = items.map { if (it.id == todoId) it.copy(isFavorite = !it.isFavorite) else it }
+        scope.launch {
+            val item = items.firstOrNull { it.id == todoId } ?: return@launch
+            val updated = item.copy(isFavorite = !item.isFavorite)
+            itemRepository.updateItem(updated)
+            items = items.map { if (it.id == todoId) updated else it }
+        }
     }
 }
 
-data class TodoItem(
-    val id: String,
-    val isChecked: Boolean,
-    val isFavorite: Boolean,
-    val text: String,
-)
+
 
 val Initial = listOf(
     TodoItem(
